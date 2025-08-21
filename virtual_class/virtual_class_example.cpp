@@ -9,7 +9,7 @@ public:
 
     ~Animal() = default;
 
-    virtual bool init() {
+    [[nodiscard]] virtual bool init() {
         spdlog::info("Animal init function");
         return true;
     };
