@@ -64,7 +64,8 @@ int main() {
     // The following error occurs because as soon as we added a single pure virtual function (see = 0), it is considered as an abstract class
     // Constructing it using the following will only result in an error, hence that is the main reason why, in a lot of other virtual
     // examples, we would inherit this directly on the children class. The children class poses no problem since it is no longer an abstract class
-    // when it has overriden the function
+    // when it has overriden the function.
+    // For more examples on pure virtual functions, please refer to the "virtual class" examples!
     // ShapeFactory factory; // Error: object of abstract class type "ShapeFactory" is not allowed
     ShapeFactory* factory_raw_ptr;
     
@@ -76,7 +77,7 @@ int main() {
     delete factory_raw_ptr;
 
     // For a more modern approach, use smart pointers
-    // This avoids the need to use the delete keyword to clean up memory
+    // This avoids the need to use the delete keyword to clean up memory and a lot safer
     auto factory_unique_ptr = std::make_unique<CircleFactory>();
     std::unique_ptr<Shape> circle_unique_ptr = factory_unique_ptr->create_shape_with_unique_ptr();
     circle_unique_ptr->draw();
