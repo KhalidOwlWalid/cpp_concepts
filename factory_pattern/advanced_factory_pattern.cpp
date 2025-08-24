@@ -11,7 +11,7 @@
  *
  * In the case of DAQ, you can have different backends that is specific for each protocol since every one of them have different
  * ways of being setup and initialized (e.g. UDP requires the socket to be binded if server or connected if client)
-*
+ *
  * We can imagine that for each of this mode, there will always be specific abstract interface that works for all of them. For instance:
  *   * setup()      - Mode specific implementation for setting up any protocols
  *   * init()       - Initialize each modes with their channels (setup UART driver etc.)
@@ -26,12 +26,34 @@
  * If however, you wish to tell the developer that they should not discard the 
  */
 
-// Uncommend this to see how each backend behaves if we use the default implementation from the backend
+// Uncomment this to see how each backend behaves if we use the default implementation from the backend base class
 #define UDP_OVERRIDE_BACKEND
 #define MAVLINK_OVERRIDE_BACKEND
 
+/*
+In this example, I have created it in such a way that this definition allows you to show the "full" potential of using
+the factory pattern.
+
+In the case of multiple backend, there will be a backend manager, where this will store all of the pointer to our
+respective backend protocols. In this example, I want to have backends for Mavlink and UDP. So, the backend manager will
+respectively initialize both the protocols accordingly, and in the update() function of the application, it will use the abstract
+interface to call the update() function of each backend.
+
+This allows us to be able to add more protocol backends without worrying of breaking the application for as long as the developer
+respects the virtual interface provided (e.g. init(), update(), shutdown()).
+
+If you wish to simplify the example with only a single backend to get a better initial understanding of how it works, uncomment the
+ALLOW_MULTIPLE_BACKENDS definition!
+*/
 #define ALLOW_MULTIPLE_BACKENDS
 
+/*
+NOTE:
+Please note that these examples do not try to handle errors if we fail to initialize the protocol. I try to implement
+everything as "easy" as possible so that you may take this and use as sort of a skeleton to build your application further.
+*/
+
+// Forward declaration
 class DAQ_Backend;
 class DAQ_Mavlink;
 class DAQ_UDP;
@@ -78,7 +100,7 @@ public:
     std::unique_ptr<DAQ_Backend> _create_backend(DAQ_Protocol protocol);
 
 #ifdef ALLOW_MULTIPLE_BACKENDS
-    std::vector<std::unique_ptr<DAQ_Backend>> _daq_backends;
+    std::vector<std::unique_ptr<DAQ_Backend>> _daq_backend_manager;
 #else
     std::unique_ptr<DAQ_Backend> _daq_backend;
 #endif // ALLOW_MULTIPLE_BACKENDS
@@ -94,6 +116,7 @@ private:
 
 class DAQ_Backend {
 
+// friend is important to be able to access protected members of the backend base class
 friend class DAQ_UDP;
 friend class DAQ_Mavlink;
 
@@ -144,10 +167,10 @@ public:
     };
 #endif
 
-
     const char *protocol_type() const override { return "UDP"; }
 
     // Protocol specific functions or variables
+    // Please read my notes on protocol specific functions in DAQ_Mavlink
     void parse_udp_packets();
     void receive_udp_packets();
 
@@ -176,7 +199,20 @@ public:
 
     const char *protocol_type() const override { return "Mavlink"; }
 
-    // Protocol specific function from parent class
+    /* 
+     * Protocol specific function that may be important for this specific protocol. This should not be called on the
+     * application level as the application backend does not "know" about the existence of these functions.
+     * These functions should be called with the object of this specific class. For example:
+     * ================================================== 
+     * DAQ_Mavlink daq_mavlink;
+     * ...
+     * ...
+     * daq_mavlink.send_mavlink_packets();
+     * ================================================== 
+     *
+     * This is what you can call public function (aka developer API), if they are using your library. If you wish to hide some
+     * internal function that should only be called within the class, then put it under private!
+     */
     void send_heartbeat() {};
     void listen_to_heartbeat() {};
     void send_mavlink_packets() {};
@@ -209,7 +245,7 @@ bool DAQ_App::init(const std::vector<DAQ_Protocol> protocols) {
             backend_ptr->init();
         }
 
-        _daq_backends.push_back(std::move(backend_ptr));
+        _daq_backend_manager.push_back(std::move(backend_ptr));
     }
 
     _is_running = true;
@@ -242,8 +278,8 @@ bool DAQ_App::init(const DAQ_Protocol protocol) {
 void DAQ_App::update() {
 
 #ifdef ALLOW_MULTIPLE_BACKENDS
-    for (size_t i = 0; i < _daq_backends.size(); i++) {
-        _daq_backends[i]->update();
+    for (size_t i = 0; i < _daq_backend_manager.size(); i++) {
+        _daq_backend_manager[i]->update();
     }
 #else
     _daq_backend->update();
@@ -254,29 +290,32 @@ void DAQ_App::update() {
 void DAQ_App::shutdown() {
 
 #ifdef ALLOW_MULTIPLE_BACKENDS
-    for (size_t i = 0; i < _daq_backends.size(); i++) {
-        _daq_backends[i]->shutdown();
+    for (size_t i = 0; i < _daq_backend_manager.size(); i++) {
+        _daq_backend_manager[i]->shutdown();
     }
 #else
     _daq_backend->shutdown();
 #endif
 
-
 }
 
 int main() {
 
+    /*
+     * The application implementation should be as simple as possible where the app should
+     * store its current state and for each different states (e.g. init, update), it should have its own
+     * respective function. This will help you in tracing at what point your application is, and it also helps
+     * in "visualizing" the flow of your application.
+     */
     DAQ_App daq_app;
 
 #ifdef ALLOW_MULTIPLE_BACKENDS
-
     std::vector<DAQ_Protocol> protocols_to_use {DAQ_Protocol::UDP, DAQ_Protocol::MAVLINK};
 
     if (!daq_app.init(protocols_to_use)) {
         spdlog::error("DAQ fails to initialize due to invalid protocol. Force closing the application.");
         return 0;
     }
-
 #else
     DAQ_Protocol protocol_type = DAQ_Protocol::UDP;
     if (!daq_app.init(protocol_type)) {
