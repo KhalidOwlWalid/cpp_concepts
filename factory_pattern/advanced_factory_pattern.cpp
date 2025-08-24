@@ -212,6 +212,8 @@ public:
      *
      * This is what you can call public function (aka developer API), if they are using your library. If you wish to hide some
      * internal function that should only be called within the class, then put it under private!
+     * 
+     * Also, depending on certain protocols (e.g. UART), you may want to consider using singleton.
      */
     void send_heartbeat() {};
     void listen_to_heartbeat() {};
